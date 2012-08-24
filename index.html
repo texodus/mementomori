@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Mori</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				color: #000000; //#61443e;
+				font-family:Monospace;
+				font-size:13px;
+				text-align:center;
+
+				background-color: #ff0000; //#bfd1e5;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#info {
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+			}
+
+			a {
+
+				color: #a06851;
+			}
+
+			#oldie {
+				background:rgb(100,0,0) !important;
+				color:#fff !important;
+				margin-top:10em !important;
+			}
+			#oldie a { color:#fff }
+
+		</style>
+	</head>
+	<body>
+
+			<div id="container"><br /><br /><br /><br /><br />Generating world...</div>
+			<button id="bt">texture</button>
+			<button id="bao">ao</button>
+			<button id="baot">texture + ao</button>
+		</div>
+
+		<script src="three.min.js"></script>
+
+		<script src="ImprovedNoise.js"></script>
+		<script src="Detector.js"></script>
+		<script src="Stats.js"></script>
+		<script src="main.js"></script>
+	</body>
+</html>
