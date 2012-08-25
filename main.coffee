@@ -1,6 +1,8 @@
 
-PLAYER_HEIGHT = 2000
-FOG = false
+PLAYER_HEIGHT = 300
+FOG = true
+NUM_BUILDINGS = 50
+FLYMODE = true
 
 class Utils
 
@@ -41,7 +43,9 @@ class World
         { @renderer, @scene, @camera } = app
 
         @data = Utils.time @generate_terrain, "Generated terrain"
-        @add_building()
+
+        for i in [0..NUM_BUILDINGS]
+            @add_building()
 
         @init_renderer()
 
@@ -92,26 +96,29 @@ class World
         # mesh.castShadow = true
         # mesh.receiveShadow = true
 
-        new THREE.Mesh(geometry, new THREE.MeshFaceMaterial())
+        geometry.mergeVertices()
+        geometry 
 
 
     init_renderer: =>
 
         @camera.position.x = @width * 100 / 2
         @camera.position.z = @width * 100 / 2
-        if FOG then @scene.fog = new THREE.FogExp2 0xff0000, 0.00004
+        if FOG then @scene.fog = new THREE.FogExp2 0xff0000, 0.00002
 
-        @scene.add Utils.time => @draw_sector 0, 0, 2
-        @scene.add Utils.time => @draw_sector 0, 1, 2
-        @scene.add Utils.time => @draw_sector 0, 2, 2
-        @scene.add Utils.time => @draw_sector 1, 0, 2
-        @scene.add Utils.time => @draw_sector 1, 2, 2
-        @scene.add Utils.time => @draw_sector 2, 0, 2
-        @scene.add Utils.time => @draw_sector 2, 1, 2
-        @scene.add Utils.time => @draw_sector 2, 2, 2
+        geometry = new THREE.Geometry()
 
-        @scene.add Utils.time => @draw_sector 1, 1, 1
+        i = 0
+        while i < 5
+            j = 0
+            while j < 5
+                #if i isnt 2 or j isnt 2
+                resolution = Math.pow 2, Math.max(Math.abs(2 - i), Math.abs(2 - j))
+                THREE.GeometryUtils.merge geometry, Utils.time (=> @draw_sector i, j, Math.ceil resolution), "Generated geometry (#{i}, #{j}) at #{resolution}"
+                j++
+            i++
 
+        @scene.add new THREE.Mesh(geometry, new THREE.MeshFaceMaterial())
 
         directionalLight = new THREE.DirectionalLight(0xff0000, 1)
         directionalLight.position.set 1, 1, 0.5
@@ -127,7 +134,7 @@ class World
 
         #         light = @create_shadow (x * 5000) + 1000, 6000, (y * 5000) + 1000, (x * 5000) - 1000, 0, (y * 5000) - 1000, 2500
 
-        skybox = new THREE.Mesh( new THREE.SphereGeometry( 90000, 60, 40 ), new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'skybox.png' ) } ) );
+        skybox = new THREE.Mesh( new THREE.SphereGeometry( 90000, 60, 40 ), new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'skybox.png' ), fog: false } ) );
         skybox.scale.x = -1;
         skybox.position = @camera.position
         @scene.add skybox
@@ -151,10 +158,10 @@ class World
     # Generate a random building
 
     add_building: =>
-        x = Math.floor Math.random() * @width
-        y = Math.floor Math.random() * @height
-
         width = 10
+
+        x = Math.floor Math.random() * (@width - width)
+        y = Math.floor Math.random() * (@height - width)
 
         console.log "#{x} #{y}"
 
@@ -228,7 +235,7 @@ class World
 
                 is_underground = true
 
-                buffer = new Int16Array @depth
+                buffer = new UInt8Array @depth
 
                 for z in [ 0 .. @depth - 1 ]
                     if z > ((data[ x * @width + y ] - min) / (max - min)) * (@depth - 30) then is_underground = false
@@ -256,12 +263,14 @@ class Application
     constructor: ->
         @controls = new THREE.FirstPersonControls @camera
         @renderer.setSize window.innerWidth, window.innerHeight
-        @renderer.shadowMapEnabled = true
-        @renderer.shadowMapSoft = true
-        @renderer.shadowMapBias = 10
-        @renderer.shadowCameraNear = 3;
-        @renderer.shadowCameraFar = @camera.far;
-        @renderer.shadowCameraFov = 90;
+        # @renderer.shadowMapEnabled = true
+        # @renderer.shadowMapSoft = true
+        # @renderer.shadowMapBias = 10
+        # @renderer.shadowCameraNear = 3;
+        # @renderer.shadowCameraFar = @camera.far;
+        # @renderer.shadowCameraFov = 90;
+
+        @renderer.autoClear = false
 
         @container.innerHTML = ""
         @container.appendChild @renderer.domElement
@@ -278,7 +287,7 @@ class Application
 
         window.addEventListener "resize", @onWindowResize, false
 
-        @world = new World @, 900, 900, 60, 300
+        @world = new World @, 1000, 1000, 100, 200
 
         setTimeout @animate, 0
 
@@ -294,19 +303,20 @@ class Application
 
         column = @world.data[x][z]
 
-        height = 0
-        while column[height] == 1
-            height++
-
-        ground = (height * 100) + PLAYER_HEIGHT
-
-        if @camera.position.y > ground
-            @delta_y += @gravity
-            @camera.position.y -= @delta_y
-            if @camera.position.y < ground then @camera.position.y = ground
-        else if @camera.position.y < ground
-            @delta_y = 0
-            @camera.position.y = (ground - @camera.position.y) * 0.5 + @camera.position.y
+        if not FLYMODE
+            height = 0
+            while column[height] == 1
+                height++
+    
+            ground = (height * 100) + PLAYER_HEIGHT
+    
+            if @camera.position.y > ground
+                @delta_y += @gravity
+                @camera.position.y -= @delta_y
+                if @camera.position.y < ground then @camera.position.y = ground
+            else if @camera.position.y < ground
+                @delta_y = 0
+                @camera.position.y = (ground - @camera.position.y) * 0.5 + @camera.position.y
 
         @render()
         @stats.update()
@@ -315,7 +325,8 @@ class Application
         @controls.update @clock.getDelta()
         @renderer.render @scene, @camera
 
-    onWindowResize = =>
+    onWindowResize: =>
+        console.log "Resize event"
         @camera.aspect = window.innerWidth / window.innerHeight
         @camera.updateProjectionMatrix()
         @renderer.setSize window.innerWidth, window.innerHeight
@@ -327,5 +338,5 @@ unless Detector.webgl
     Detector.addGetWebGLMessage()
     document.getElementById("container").innerHTML = ""
 
-new Application
+window.onload = -> new Application
 
