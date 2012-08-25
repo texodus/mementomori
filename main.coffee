@@ -97,7 +97,10 @@ class World
         # mesh.receiveShadow = true
 
         geometry.mergeVertices()
-        geometry 
+        mesh = new THREE.Mesh geometry, new THREE.MeshFaceMaterial()
+        mesh.position.x += resolution * 50
+        mesh.position.z += resolution * 50
+        mesh
 
 
     init_renderer: =>
@@ -235,7 +238,7 @@ class World
 
                 is_underground = true
 
-                buffer = new UInt8Array @depth
+                buffer = new Uint16Array @depth
 
                 for z in [ 0 .. @depth - 1 ]
                     if z > ((data[ x * @width + y ] - min) / (max - min)) * (@depth - 30) then is_underground = false

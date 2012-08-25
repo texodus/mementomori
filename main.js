@@ -184,7 +184,10 @@
         dx += resolution;
       }
       geometry.mergeVertices();
-      return geometry;
+      mesh = new THREE.Mesh(geometry, new THREE.MeshFaceMaterial());
+      mesh.position.x += resolution * 50;
+      mesh.position.z += resolution * 50;
+      return mesh;
     };
 
     World.prototype.init_renderer = function() {
@@ -324,7 +327,7 @@
           _results1 = [];
           for (y = _k = 0, _ref1 = this.height - 1; 0 <= _ref1 ? _k <= _ref1 : _k >= _ref1; y = 0 <= _ref1 ? ++_k : --_k) {
             is_underground = true;
-            buffer = new UInt8Array(this.depth);
+            buffer = new Uint16Array(this.depth);
             for (z = _l = 0, _ref2 = this.depth - 1; 0 <= _ref2 ? _l <= _ref2 : _l >= _ref2; z = 0 <= _ref2 ? ++_l : --_l) {
               if (z > ((data[x * this.width + y] - min) / (max - min)) * (this.depth - 30)) {
                 is_underground = false;
