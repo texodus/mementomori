@@ -1,7 +1,7 @@
 
 PLAYER_HEIGHT = 300
 FOG = true
-NUM_BUILDINGS = 50
+NUM_BUILDINGS = 2
 FLYMODE = true
 
 class Utils
@@ -12,8 +12,116 @@ class Utils
         console.log "#{label} elapsed in #{(new Date() - start) / 1000}s"
         x
 
+THREE.GeometryUtils.merge_batch = (geometry1, geometries) ->
 
-# These are some performance enchancing cached geometries        
+    matrix = undefined
+    matrixRotation = undefined
+    vertexOffset = geometry1.vertices.length
+    uvPosition = geometry1.faceVertexUvs[0].length
+    vertices1 = geometry1.vertices
+    faces1 = geometry1.faces
+    uvs1 = geometry1.faceVertexUvs[0]
+    geo1MaterialsMap = {}
+    i = 0
+  
+    while i < geometry1.materials.length
+      id = geometry1.materials[i].id
+      geo1MaterialsMap[id] = i
+      i++
+  
+    for object2 in geometries
+  
+        geometry2 = (if object2 instanceof THREE.Mesh then object2.geometry else object2)
+        vertices2 = geometry2.vertices
+        faces2 = geometry2.faces
+        uvs2 = geometry2.faceVertexUvs[0]
+      
+        if object2 instanceof THREE.Mesh
+          object2.matrixAutoUpdate and object2.updateMatrix()
+          matrix = object2.matrix
+          matrixRotation = new THREE.Matrix4()
+          matrixRotation.extractRotation matrix, object2.scale
+        
+        # vertices
+        i = 0
+        il = vertices2.length
+      
+        while i < il
+          vertex = vertices2[i]
+          vertexCopy = vertex.clone()
+          matrix.multiplyVector3 vertexCopy  if matrix
+          vertices1.push vertexCopy
+          i++
+        
+        # faces
+        i = 0
+        il = faces2.length
+      
+        while i < il
+          face = faces2[i]
+          faceCopy = undefined
+          normal = undefined
+          color = undefined
+          faceVertexNormals = face.vertexNormals
+          faceVertexColors = face.vertexColors
+          if face instanceof THREE.Face3
+            faceCopy = new THREE.Face3(face.a + vertexOffset, face.b + vertexOffset, face.c + vertexOffset)
+          else faceCopy = new THREE.Face4(face.a + vertexOffset, face.b + vertexOffset, face.c + vertexOffset, face.d + vertexOffset)  if face instanceof THREE.Face4
+          faceCopy.normal.copy face.normal
+          matrixRotation.multiplyVector3 faceCopy.normal  if matrixRotation
+          j = 0
+          jl = faceVertexNormals.length
+      
+          while j < jl
+            normal = faceVertexNormals[j].clone()
+            matrixRotation.multiplyVector3 normal  if matrixRotation
+            faceCopy.vertexNormals.push normal
+            j++
+          faceCopy.color.copy face.color
+          j = 0
+          jl = faceVertexColors.length
+      
+          while j < jl
+            color = faceVertexColors[j]
+            faceCopy.vertexColors.push color.clone()
+            j++
+          if face.materialIndex isnt `undefined`
+            material2 = geometry2.materials[face.materialIndex]
+            materialId2 = material2.id
+            materialIndex = geo1MaterialsMap[materialId2]
+            if materialIndex is `undefined`
+              materialIndex = geometry1.materials.length
+              geo1MaterialsMap[materialId2] = materialIndex
+              geometry1.materials.push material2
+            faceCopy.materialIndex = materialIndex
+          faceCopy.centroid.copy face.centroid
+          matrix.multiplyVector3 faceCopy.centroid  if matrix
+          faces1.push faceCopy
+          i++
+        
+        # uvs
+        i = 0
+        il = uvs2.length
+      
+        while i < il
+          uv = uvs2[i]
+          uvCopy = []
+          j = 0
+          jl = uv.length
+      
+          while j < jl
+            uvCopy.push new THREE.UV(uv[j].u, uv[j].v)
+            j++
+          uvs1.push uvCopy
+          i++
+
+    null
+
+
+
+
+
+#   These are some performance enchancing cached geometries        
 
 class WorldPrimitives
 
@@ -106,27 +214,23 @@ class World
         @camera.position.z = @width * 100 / 2
         if FOG then @scene.fog = new THREE.FogExp2 0xff0000, 0.00002
 
-        geometry = undefined
+        geometry = new THREE.Geometry()
 
-        i = 0
         mid = Math.floor (@width / @sector_size) / 2
-        while i < @width / @sector_size
-            j = 0
-            while j < @height / @sector_size
-                #if i isnt 2 or j isnt 2
-                resolution = Math.pow 2, Math.max(Math.abs(mid - i), Math.abs(mid - j))
-                geo = Utils.time (=> @draw_sector i, j, Math.ceil resolution), "Generated geometry (#{i}, #{j}) at #{resolution}"
-                if geometry == undefined
-                    geometry = geo
-                else
+
+        geos = 
+            for i in [0 .. @width / @sector_size - 1]
+                for j in [0 .. @height / @sector_size - 1]
+    
+                    resolution = Math.pow 2, Math.max(Math.abs(mid - i), Math.abs(mid - j))
+                    geo = Utils.time (=> @draw_sector i, j, Math.ceil resolution), "Generated geometry (#{i}, #{j}) at #{resolution}"
+                    
                     mesh = new THREE.Mesh geo, new THREE.MeshFaceMaterial()
                     mesh.position.x += resolution * 50
                     mesh.position.z += resolution * 50
                     mesh
 
-                    THREE.GeometryUtils.merge geometry, geo
-                j++
-            i++
+        THREE.GeometryUtils.merge_batch geometry, _.flatten geos
 
         @scene.add new THREE.Mesh(geometry, new THREE.MeshFaceMaterial())
 
@@ -308,7 +412,7 @@ class Application
 
         window.addEventListener "resize", @onWindowResize, false
 
-        @world = new World @, 400, 400, 100, 400
+        @world = new World @, 100, 100, 100, 100
 
         setTimeout @animate, 0
 
