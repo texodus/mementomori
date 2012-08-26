@@ -45,9 +45,14 @@ class World
         @data = Utils.time @generate_terrain, "Generated terrain"
 
         for i in [0..NUM_BUILDINGS]
-            @add_building()
+            width = 10
 
-        @init_renderer()
+            x = Math.floor Math.random() * (@width - width)
+            y = Math.floor Math.random() * (@height - width)
+
+            Utils.time (=> @add_building x, y, width), "Added building (type A) at (#{x}, #{y})"
+
+        Utils.time @init_renderer, "Initialized #{@width}x#{@height}x#{@depth} world with #{@sector_size} sectors"
 
     draw_sector: (x, y, resolution) =>
 
@@ -55,24 +60,20 @@ class World
 
         dx = x * @sector_size
         while dx < (x + 1) * @sector_size
-            slice = @data[ dx ]
-
             dy = y * @sector_size
             while dy < (y + 1) * @sector_size
-                column = slice[dy]
-
                 dz = 0
-                while dz < column.length - 1
-                    cell = column[dz]
+                while dz < @depth - 1
+                    cell = @data.get(dx, dy, dz)
 
                     if cell == 1
 
-                        nx = not ~~@data[dx - resolution]?[dy][dz]
-                        px = not ~~@data[dx + resolution]?[dy][dz]
-                        nz = not ~~slice[dy - resolution]?[dz]
-                        pz = not ~~slice[dy + resolution]?[dz]
-                        ny = not ~~column[dz - resolution]
-                        py = not ~~column[dz + resolution]
+                        nx = not ~~@data.get(dx - resolution, dy, dz)
+                        px = not ~~@data.get(dx + resolution, dy, dz)
+                        nz = not ~~@data.get(dx, dy - resolution, dz)
+                        pz = not ~~@data.get(dx, dy + resolution, dz)
+                        ny = not ~~@data.get(dx, dy, dz - resolution)
+                        py = not ~~@data.get(dx, dy, dz + resolution)
 
                         index = nx*32 + px*16 + ny*8 + py*4 + nz*2 + pz
 
@@ -87,20 +88,16 @@ class World
                             mesh.position.y = dz * 100
                             mesh.position.z = dy * 100
     
-        
                             THREE.GeometryUtils.merge geometry, mesh
 
                     dz += resolution
+                    #geometry.mergeVertices()
                 dy += resolution
             dx += resolution
         # mesh.castShadow = true
         # mesh.receiveShadow = true
 
-        geometry.mergeVertices()
-        mesh = new THREE.Mesh geometry, new THREE.MeshFaceMaterial()
-        mesh.position.x += resolution * 50
-        mesh.position.z += resolution * 50
-        mesh
+        geometry
 
 
     init_renderer: =>
@@ -109,15 +106,25 @@ class World
         @camera.position.z = @width * 100 / 2
         if FOG then @scene.fog = new THREE.FogExp2 0xff0000, 0.00002
 
-        geometry = new THREE.Geometry()
+        geometry = undefined
 
         i = 0
-        while i < 5
+        mid = Math.floor (@width / @sector_size) / 2
+        while i < @width / @sector_size
             j = 0
-            while j < 5
+            while j < @height / @sector_size
                 #if i isnt 2 or j isnt 2
-                resolution = Math.pow 2, Math.max(Math.abs(2 - i), Math.abs(2 - j))
-                THREE.GeometryUtils.merge geometry, Utils.time (=> @draw_sector i, j, Math.ceil resolution), "Generated geometry (#{i}, #{j}) at #{resolution}"
+                resolution = Math.pow 2, Math.max(Math.abs(mid - i), Math.abs(mid - j))
+                geo = Utils.time (=> @draw_sector i, j, Math.ceil resolution), "Generated geometry (#{i}, #{j}) at #{resolution}"
+                if geometry == undefined
+                    geometry = geo
+                else
+                    mesh = new THREE.Mesh geo, new THREE.MeshFaceMaterial()
+                    mesh.position.x += resolution * 50
+                    mesh.position.z += resolution * 50
+                    mesh
+
+                    THREE.GeometryUtils.merge geometry, geo
                 j++
             i++
 
@@ -160,20 +167,13 @@ class World
 
     # Generate a random building
 
-    add_building: =>
-        width = 10
-
-        x = Math.floor Math.random() * (@width - width)
-        y = Math.floor Math.random() * (@height - width)
-
-        console.log "#{x} #{y}"
+    add_building: (x, y, width) =>
 
         for xx in [x .. x + width]
             for yy in [y .. y + width]
-                @data[xx][yy] =
-                    for zz in [0 .. @data[xx][yy].length - 1]
-                        if zz % 2 == 0 then 1 else @data[xx][yy][zz]
-                @data[xx][yy][@depth - 1] = 0
+                for zz in [0 .. @depth - 1]
+                    @data.set(xx, yy, zz, 1) if zz % 2 == 0
+                @data.set(xx, yy, @depth - 1, 0)
 
     create_shadow: (x1, y1, z1, x2, y2, z2, s) =>
         shadow = new THREE.DirectionalLight(0x000000, 0)
@@ -233,29 +233,44 @@ class World
             max = Math.max item, max
 
 
+        buffer = new UnboxedArray(@width, @height, @depth)
+
         for x in [ 0 .. @width - 1 ]
             for y in [ 0 .. @height - 1 ]
 
                 is_underground = true
 
-                buffer = new Uint16Array @depth
-
                 for z in [ 0 .. @depth - 1 ]
                     if z > ((data[ x * @width + y ] - min) / (max - min)) * (@depth - 30) then is_underground = false
-                    if is_underground then buffer[z] = 1 else buffer[z] = 0
+                    if is_underground then buffer.set(x, y, z, 1) else buffer.set(x, y, z, 0)
 
-                buffer
+        buffer
 
-    getY = (x, z) => ~~(data[x + z * @world_width] * 0.2)
 
+class UnboxedArray
+
+    constructor: (@width, @height, @depth) ->
+
+        @array =
+            for i in [0 .. @width]
+                for j in [0 .. @height]
+                    for k in [0 .. @depth]
+                        0
+                #new Array @height * @depth
+
+
+    get: (x, y, z) =>
+        if 0 <= x <= @width and 0 <= y <= @height and 0 <= z <= @depth
+            @array[x][y][z]
+
+    set: (x, y, z, q) =>
+        @array[x][y][z] = q
 
 
 # Game instance
 
 class Application
 
-    container: document.getElementById "container"
-  
     renderer: new THREE.WebGLRenderer(clearColor: 0xff0000)
     stats:    new Stats()
     clock:    new THREE.Clock()
@@ -264,6 +279,9 @@ class Application
     scene:    new THREE.Scene()
     
     constructor: ->
+
+        @container = document.getElementById "container"
+
         @controls = new THREE.FirstPersonControls @camera
         @renderer.setSize window.innerWidth, window.innerHeight
         # @renderer.shadowMapEnabled = true
@@ -290,7 +308,7 @@ class Application
 
         window.addEventListener "resize", @onWindowResize, false
 
-        @world = new World @, 1000, 1000, 100, 200
+        @world = new World @, 400, 400, 100, 400
 
         setTimeout @animate, 0
 
@@ -304,9 +322,9 @@ class Application
         x = Math.max(Math.floor((@camera.position.x - 50) / 100), 0)
         z = Math.max(Math.floor((@camera.position.z - 50) / 100), 0)
 
-        column = @world.data[x][z]
 
         if not FLYMODE
+            column = @world.data[x][z]
             height = 0
             while column[height] == 1
                 height++
@@ -334,12 +352,10 @@ class Application
         @camera.updateProjectionMatrix()
         @renderer.setSize window.innerWidth, window.innerHeight
         @controls.handleResize()
-    
-
 
 unless Detector.webgl
     Detector.addGetWebGLMessage()
     document.getElementById("container").innerHTML = ""
 
-window.onload = -> new Application
+$ -> new Application
 
