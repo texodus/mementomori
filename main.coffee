@@ -1,8 +1,10 @@
 
-PLAYER_HEIGHT = 300
+PLAYER_HEIGHT = 250
+PLAYER_SPEED = 500
 FOG = true
+FOG_DENSITY =  0.00008
 NUM_BUILDINGS = 50
-FLYMODE = true
+FLYMODE = false
 
 class Utils
 
@@ -204,7 +206,7 @@ class World
 
         @camera.position.x = @width * 100 / 2
         @camera.position.z = @width * 100 / 2
-        if FOG then @scene.fog = new THREE.FogExp2 0xff0000, 0.00002
+        if FOG then @scene.fog = new THREE.FogExp2 0xff0000, FOG_DENSITY
 
         geometry = new THREE.Geometry()
         mid = Math.floor (@width / @sector_size) / 2
@@ -324,6 +326,7 @@ class World
         buffer =
             for i in [0 .. @width]
                 for j in [0 .. @height]
+                   # new Uint8Array @depth
                     for k in [0 .. @depth]
                         0
 
@@ -372,7 +375,7 @@ class Application
         @stats.domElement.style.top = "0px"
         @container.appendChild @stats.domElement
     
-        @controls.movementSpeed = 1000
+        @controls.movementSpeed = PLAYER_SPEED
         @controls.lookSpeed = 0.125
         @controls.lookVertical = true
         @controls.constrainVertical = true
