@@ -1,7 +1,7 @@
 
 PLAYER_HEIGHT = 300
 FOG = true
-NUM_BUILDINGS = 2
+NUM_BUILDINGS = 50
 FLYMODE = true
 
 class Utils
@@ -12,30 +12,33 @@ class Utils
         console.log "#{label} elapsed in #{(new Date() - start) / 1000}s"
         x
 
-THREE.GeometryUtils.merge_batch = (geometry1, geometries) ->
 
-    matrix = undefined
-    matrixRotation = undefined
-    vertexOffset = geometry1.vertices.length
-    uvPosition = geometry1.faceVertexUvs[0].length
-    vertices1 = geometry1.vertices
-    faces1 = geometry1.faces
-    uvs1 = geometry1.faceVertexUvs[0]
-    geo1MaterialsMap = {}
-    i = 0
-  
-    while i < geometry1.materials.length
-      id = geometry1.materials[i].id
-      geo1MaterialsMap[id] = i
-      i++
-  
-    for object2 in geometries
-  
+
+geo1MaterialsMap = {}
+old_index = 0
+
+THREE.GeometryUtils.merge_batch = (geometry1, object2) -> # mesh | geometry
+    #for object2 in geometries
+        matrix = undefined
+        matrixRotation = undefined
+        vertexOffset = geometry1.vertices.length
+        uvPosition = geometry1.faceVertexUvs[0].length
         geometry2 = (if object2 instanceof THREE.Mesh then object2.geometry else object2)
+        vertices1 = geometry1.vertices
         vertices2 = geometry2.vertices
+        faces1 = geometry1.faces
         faces2 = geometry2.faces
+        uvs1 = geometry1.faceVertexUvs[0]
         uvs2 = geometry2.faceVertexUvs[0]
+
+        i = old_index
       
+        while i < geometry1.materials.length
+          id = geometry1.materials[i].id
+          geo1MaterialsMap[id] = i
+          i++
+        old_index = geometry1.materials.length
+
         if object2 instanceof THREE.Mesh
           object2.matrixAutoUpdate and object2.updateMatrix()
           matrix = object2.matrix
@@ -73,7 +76,7 @@ THREE.GeometryUtils.merge_batch = (geometry1, geometries) ->
           jl = faceVertexNormals.length
       
           while j < jl
-            normal = faceVertexNormals[j].clone()
+            normal = faceVertexNormals[j] #.clone()
             matrixRotation.multiplyVector3 normal  if matrixRotation
             faceCopy.vertexNormals.push normal
             j++
@@ -83,7 +86,7 @@ THREE.GeometryUtils.merge_batch = (geometry1, geometries) ->
       
           while j < jl
             color = faceVertexColors[j]
-            faceCopy.vertexColors.push color.clone()
+            faceCopy.vertexColors.push color #.clone()
             j++
           if face.materialIndex isnt `undefined`
             material2 = geometry2.materials[face.materialIndex]
@@ -105,19 +108,18 @@ THREE.GeometryUtils.merge_batch = (geometry1, geometries) ->
       
         while i < il
           uv = uvs2[i]
-          uvCopy = []
-          j = 0
-          jl = uv.length
+          # uvCopy = []
+          # j = 0
+          # jl = uv.length
       
-          while j < jl
-            uvCopy.push new THREE.UV(uv[j].u, uv[j].v)
-            j++
-          uvs1.push uvCopy
+          # while j < jl
+          #   uvCopy.push new THREE.UV(uv[j].u, uv[j].v)
+          #   j++
+          uvs1.push uv
           i++
-
     null
-
-
+    
+    
 
 
 
@@ -162,48 +164,38 @@ class World
 
         Utils.time @init_renderer, "Initialized #{@width}x#{@height}x#{@depth} world with #{@sector_size} sectors"
 
-    draw_sector: (x, y, resolution) =>
+    draw_sector: (geometry, x, y, resolution) =>
 
-        geometry = new THREE.Geometry()
-
-        dx = x * @sector_size
-        while dx < (x + 1) * @sector_size
-            dy = y * @sector_size
-            while dy < (y + 1) * @sector_size
-                dz = 0
-                while dz < @depth - 1
-                    cell = @data.get(dx, dy, dz)
-
+        #geos = []
+        for dx in [x * @sector_size .. (x + 1) * @sector_size - 1] by resolution
+            for dy in  [y * @sector_size .. (y + 1) * @sector_size - 1] by resolution
+                for dz in [0 .. @depth - 1] by resolution
+                    cell = @data[dx][dy][dz]
+    
                     if cell == 1
-
-                        nx = not ~~@data.get(dx - resolution, dy, dz)
-                        px = not ~~@data.get(dx + resolution, dy, dz)
-                        nz = not ~~@data.get(dx, dy - resolution, dz)
-                        pz = not ~~@data.get(dx, dy + resolution, dz)
-                        ny = not ~~@data.get(dx, dy, dz - resolution)
-                        py = not ~~@data.get(dx, dy, dz + resolution)
-
+    
+                        nx = not ~~@data[dx - resolution]?[dy][dz]
+                        px = not ~~@data[dx + resolution]?[dy][dz]
+                        nz = not ~~@data[dx][dy - resolution]?[dz] 
+                        pz = not ~~@data[dx][dy + resolution]?[dz] 
+                        ny = not ~~@data[dx][dy][dz - resolution]
+                        py = not ~~@data[dx][dy][dz + resolution] 
+    
                         index = nx*32 + px*16 + ny*8 + py*4 + nz*2 + pz
-
-                        #geo = new THREE.CubeGeometry 100, 100, 100, 1, 1, 1, new THREE.MeshLambertMaterial({color: 0xff0000})
+    
                         if index != 0
                             geo = WorldPrimitives.cubes[index]
                             mesh = new THREE.Mesh geo
                             mesh.scale.x = resolution
                             mesh.scale.y = resolution
                             mesh.scale.z = resolution
-                            mesh.position.x = dx * 100
-                            mesh.position.y = dz * 100
-                            mesh.position.z = dy * 100
-    
-                            THREE.GeometryUtils.merge geometry, mesh
+                            mesh.position.x = dx * 100 + resolution * 50
+                            mesh.position.y = dz * 100 + resolution * 50
+                            mesh.position.z = dy * 100 + resolution * 50
 
-                    dz += resolution
-                    #geometry.mergeVertices()
-                dy += resolution
-            dx += resolution
-        # mesh.castShadow = true
-        # mesh.receiveShadow = true
+                            THREE.GeometryUtils.merge_batch geometry, mesh
+    
+        #THREE.GeometryUtils.merge_batch geometry, geos
 
         geometry
 
@@ -215,23 +207,13 @@ class World
         if FOG then @scene.fog = new THREE.FogExp2 0xff0000, 0.00002
 
         geometry = new THREE.Geometry()
-
         mid = Math.floor (@width / @sector_size) / 2
 
-        geos = 
-            for i in [0 .. @width / @sector_size - 1]
-                for j in [0 .. @height / @sector_size - 1]
-    
-                    resolution = Math.pow 2, Math.max(Math.abs(mid - i), Math.abs(mid - j))
-                    geo = Utils.time (=> @draw_sector i, j, Math.ceil resolution), "Generated geometry (#{i}, #{j}) at #{resolution}"
-                    
-                    mesh = new THREE.Mesh geo, new THREE.MeshFaceMaterial()
-                    mesh.position.x += resolution * 50
-                    mesh.position.z += resolution * 50
-                    mesh
-
-        THREE.GeometryUtils.merge_batch geometry, _.flatten geos
-
+        for i in [0 .. @width / @sector_size - 1]
+            for j in [0 .. @height / @sector_size - 1]
+                resolution = Math.pow 2, Math.max(Math.abs(mid - i), Math.abs(mid - j))
+                Utils.time (=> @draw_sector geometry, i, j, Math.ceil resolution), "Generated geometry (#{i}, #{j}) at #{resolution}"
+                
         @scene.add new THREE.Mesh(geometry, new THREE.MeshFaceMaterial())
 
         directionalLight = new THREE.DirectionalLight(0xff0000, 1)
@@ -276,8 +258,10 @@ class World
         for xx in [x .. x + width]
             for yy in [y .. y + width]
                 for zz in [0 .. @depth - 1]
-                    @data.set(xx, yy, zz, 1) if zz % 2 == 0
-                @data.set(xx, yy, @depth - 1, 0)
+                    @data[xx][yy][zz] = 1 if zz % 2 == 0
+                @data[xx][yy][@depth - 1] = 0
+
+        null
 
     create_shadow: (x1, y1, z1, x2, y2, z2, s) =>
         shadow = new THREE.DirectionalLight(0x000000, 0)
@@ -337,7 +321,11 @@ class World
             max = Math.max item, max
 
 
-        buffer = new UnboxedArray(@width, @height, @depth)
+        buffer =
+            for i in [0 .. @width]
+                for j in [0 .. @height]
+                    for k in [0 .. @depth]
+                        0
 
         for x in [ 0 .. @width - 1 ]
             for y in [ 0 .. @height - 1 ]
@@ -346,29 +334,10 @@ class World
 
                 for z in [ 0 .. @depth - 1 ]
                     if z > ((data[ x * @width + y ] - min) / (max - min)) * (@depth - 30) then is_underground = false
-                    if is_underground then buffer.set(x, y, z, 1) else buffer.set(x, y, z, 0)
+                    if is_underground then buffer[x][y][z] = 1 else buffer[x][y][z] = 0
 
         buffer
 
-
-class UnboxedArray
-
-    constructor: (@width, @height, @depth) ->
-
-        @array =
-            for i in [0 .. @width]
-                for j in [0 .. @height]
-                    for k in [0 .. @depth]
-                        0
-                #new Array @height * @depth
-
-
-    get: (x, y, z) =>
-        if 0 <= x <= @width and 0 <= y <= @height and 0 <= z <= @depth
-            @array[x][y][z]
-
-    set: (x, y, z, q) =>
-        @array[x][y][z] = q
 
 
 # Game instance
@@ -412,7 +381,7 @@ class Application
 
         window.addEventListener "resize", @onWindowResize, false
 
-        @world = new World @, 100, 100, 100, 100
+        @world = new World @, 750, 750, 100, 150
 
         setTimeout @animate, 0
 
