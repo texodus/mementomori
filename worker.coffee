@@ -1,4 +1,8 @@
 
+window = {}
+importScripts "ImprovedNoise.js", "three.min.js", "underscore-min.js"
+
+
 # Static configuration variables, working
 
 PLAYER_HEIGHT     = 250
@@ -213,7 +217,7 @@ class World
 
             Utils.time (=> @add_building x, y, width, height), "Added building (type A) at (#{x}, #{y})"
 
-        Utils.time @init_renderer, "Initialized #{@width}x#{@height}x#{@depth} world with #{@sector_size} sectors"
+    #    Utils.time @init_renderer, "Initialized #{@width}x#{@height}x#{@depth} world with #{@sector_size} sectors"
 
 
 
@@ -224,6 +228,8 @@ class World
     # TODO geometry should be an instance var
 
     draw_sector: (x, y, resolution) =>
+
+    	geometry = new THREE.Geometry()
 
         for dx in [x * @sector_size .. (x + 1) * @sector_size - 1] by resolution
             for dy in  [y * @sector_size .. (y + 1) * @sector_size - 1] by resolution
@@ -253,7 +259,7 @@ class World
 
                             THREE.GeometryUtils.merge_batch @geometry, mesh
     
-        @geometry
+        geometry
 
 
 
@@ -261,10 +267,7 @@ class World
 
     init_renderer: =>
 
-        @camera.position.x = @width * 100 / 2
-        @camera.position.z = @width * 100 / 2
-        if FOG then @scene.fog = new THREE.FogExp2 0xff0000, FOG_DENSITY
-
+        
         @geometry = new THREE.Geometry()
         mid = Math.floor (@width / @sector_size) / 2
 
@@ -275,46 +278,9 @@ class World
                 
         @scene.add new THREE.Mesh(@geometry, new THREE.MeshFaceMaterial())
 
-        directionalLight = new THREE.DirectionalLight(0xff0000, 2)
-        directionalLight.position.set 1, 1, 0.5
-      
-        if SHADOWS
-
-            # must increase shadow light frustrum
-            directionalLight.target.position.set(-1 , -1 , -0.5)
-            directionalList.castShadow = true
+       
 
 
-        @scene.add directionalLight
-
-        directionalLight = new THREE.DirectionalLight(0xff7c00, 2)
-        directionalLight.position.set(0, 0, -1)
-        @scene.add directionalLight
-
-        if SHADOWS
-            for x in [0 .. 1]
-                for y in [0]
-    
-                    light = @create_shadow (x * 5000) + 1000, 6000, (y * 5000) + 1000, (x * 5000) - 1000, 0, (y * 5000) - 1000, 2500
-
-        skybox = new THREE.Mesh( new THREE.SphereGeometry( 90000, 60, 40 ), new THREE.MeshBasicMaterial( { map: THREE.ImageUtils.loadTexture( 'skybox.png' ), fog: false } ) );
-        skybox.scale.x = -1;
-        skybox.position = @camera.position
-        @scene.add skybox
-
-
-
-
-
-    #### Private
-
-    # Convenience to load a texture & do some wiring
-
-    loadTexture = (path, callback) ->
-        image        = new Image()
-        image.onload = callback
-        image.src    = path
-        image
 
 
 
@@ -329,27 +295,6 @@ class World
                 @data[xx][yy][@depth - 1] = 0
 
         null
-
-    create_shadow: (x1, y1, z1, x2, y2, z2, s) =>
-        shadow = new THREE.DirectionalLight(0x000000, 0)
-
-        shadow.position.set(x1, y1, z1)
-        shadow.target.position.set(x2, y2, z2)
-        shadow.castShadow = true
-        shadow.shadowDarkness = 0.8
-        shadow.shadowCameraVisible = true
-        shadow.shadowCameraLeft = -s;
-        shadow.shadowCameraRight = s;
-        shadow.shadowCameraTop = s;
-        shadow.shadowCameraBottom = -s;
-        shadow.shadowCameraFar = 20000
-        shadow.shadowMapWidth = 4096
-        shadow.shadowMapHeight = 4096
-        shadow.shadowBias = 0.0005
-
-        shadow
-
-
 
     # Generates the world array.
 
@@ -406,100 +351,15 @@ class World
 
         buffer
 
+world = new World @, WORLD_SIZE, WORLD_SIZE, WORLD_HEIGHT, SECTOR_SIZE
 
 
-# Game instance
+post = (e) ->
+	self.postMessage 'message', (world.draw_sector e.data.x, e.data.y, e.data.resolution)
 
-class Application
-
-    stats:    new Stats()
-    clock:    new THREE.Clock()
-    camera:   new THREE.PerspectiveCamera 50, window.innerWidth / window.innerHeight, 1, 500000
-    controls: undefined
-    scene:    new THREE.Scene()
-    
-    constructor: ->
-
-        @container = document.getElementById "container"
-        @controls = new THREE.FirstPersonControls @camera
-        @renderer = new THREE.WebGLRenderer clearColor: 0xff0000
-
-        @renderer.setSize window.innerWidth, window.innerHeight
-
-        if SHADOWS    
-            @renderer.shadowMapEnabled = true
-            @renderer.shadowMapSoft = true
-            @renderer.shadowMapBias = 10
-            @renderer.shadowCameraNear = 3;
-            @renderer.shadowCameraFar = @camera.far;
-            @renderer.shadowCameraFov = 90;
-
-        @renderer.autoClear = false
-
-        @container.innerHTML = ""
-        @container.appendChild @renderer.domElement
-        @stats.domElement.style.position = "absolute"
-        @stats.domElement.style.top = "0px"
-        @container.appendChild @stats.domElement
-    
-        @controls.movementSpeed = PLAYER_SPEED
-        @controls.lookSpeed = 0.125
-        @controls.lookVertical = true
-        @controls.constrainVertical = true
-
-        if PLAYER_LIMIT_VIEW
-            @controls.verticalMin = 1.1
-            @controls.verticalMax = 2.2
-
-        window.addEventListener "resize", @onWindowResize, false
-
-        @world = new World @, WORLD_SIZE, WORLD_SIZE, WORLD_HEIGHT, SECTOR_SIZE
-
-        setTimeout @animate, 0
-
-    gravity: 5
-    delta_y: 0
-
-    
-    animate: =>
-        requestAnimationFrame @animate
-
-        x = Math.max(Math.floor((@camera.position.x - 50) / 100), 0)
-        z = Math.max(Math.floor((@camera.position.z - 50) / 100), 0)
+self.addEventListener 'message', post, false
 
 
-        if not FLYMODE
-            column = @world.data[x][z]
-            height = 0
-            while column[height] == 1
-                height++
-    
-            ground = (height * 100) + PLAYER_HEIGHT
-    
-            if @camera.position.y > ground
-                @delta_y += @gravity
-                @camera.position.y -= @delta_y
-                if @camera.position.y < ground then @camera.position.y = ground
-            else if @camera.position.y < ground
-                @delta_y = 0
-                @camera.position.y = (ground - @camera.position.y) * 0.5 + @camera.position.y
 
-        @render()
-        @stats.update()
-    
-    render: =>
-        @controls.update @clock.getDelta()
-        @renderer.render @scene, @camera
 
-    onWindowResize: =>
-        console.log "Resize event"
-        @camera.aspect = window.innerWidth / window.innerHeight
-        @camera.updateProjectionMatrix()
-        @renderer.setSize window.innerWidth, window.innerHeight
-        @controls.handleResize()
 
-unless Detector.webgl
-    Detector.addGetWebGLMessage()
-    document.getElementById("container").innerHTML = ""
-
-$ -> setTimeout (-> new Application), 500
