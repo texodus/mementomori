@@ -1,10 +1,16 @@
 
+
 PLAYER_HEIGHT = 250
 PLAYER_SPEED = 500
 FOG = true
 FOG_DENSITY =  0.00008
 NUM_BUILDINGS = 50
 FLYMODE = false
+SHADOWS = false
+PLAYER_LIMIT_VIEW = false
+WORLD_SIZE = 750
+WORLD_HEIGHT = 100
+SECTOR_SIZE = 150
 
 class Utils
 
@@ -25,7 +31,7 @@ THREE.GeometryUtils.merge_batch = (geometry1, object2) -> # mesh | geometry
         matrixRotation = undefined
         vertexOffset = geometry1.vertices.length
         uvPosition = geometry1.faceVertexUvs[0].length
-        geometry2 = (if object2 instanceof THREE.Mesh then object2.geometry else object2)
+        geometry2 = if object2 instanceof THREE.Mesh then object2.geometry else object2
         vertices1 = geometry1.vertices
         vertices2 = geometry2.vertices
         faces1 = geometry1.faces
@@ -140,7 +146,7 @@ class WorldPrimitives
     
                                 { nx: nx, px: px, ny: ny, py: py, nz: nz, pz: pz }
 
-    material = new THREE.MeshLambertMaterial color: 0xff0000
+    material = new THREE.MeshLambertMaterial color: 0xffffff
 
     @cubes =
 
@@ -157,12 +163,13 @@ class World
         @data = Utils.time @generate_terrain, "Generated terrain"
 
         for i in [0..NUM_BUILDINGS]
-            width = 10
+            width = Math.floor Math.random() * 10 + 8
+            height = Math.floor Math.random() * 30 + 1
 
             x = Math.floor Math.random() * (@width - width)
             y = Math.floor Math.random() * (@height - width)
 
-            Utils.time (=> @add_building x, y, width), "Added building (type A) at (#{x}, #{y})"
+            Utils.time (=> @add_building x, y, width, height), "Added building (type A) at (#{x}, #{y})"
 
         Utils.time @init_renderer, "Initialized #{@width}x#{@height}x#{@depth} world with #{@sector_size} sectors"
 
@@ -218,13 +225,13 @@ class World
                 
         @scene.add new THREE.Mesh(geometry, new THREE.MeshFaceMaterial())
 
-        directionalLight = new THREE.DirectionalLight(0xff0000, 1)
+        directionalLight = new THREE.DirectionalLight(0xff0000, 2)
         directionalLight.position.set 1, 1, 0.5
-        directionalLight.target.position.set(-1 , -1 , -0.5)
+      #  directionalLight.target.position.set(-1 , -1 , -0.5)
         @scene.add directionalLight
 
         directionalLight = new THREE.DirectionalLight(0xff7c00, 2)
-        directionalLight.position.set(0, 0, 1)
+        directionalLight.position.set(0, 0, -1)
         @scene.add directionalLight
 
         # for x in [0 .. 1]
@@ -255,11 +262,11 @@ class World
 
     # Generate a random building
 
-    add_building: (x, y, width) =>
+    add_building: (x, y, width, height) =>
 
         for xx in [x .. x + width]
             for yy in [y .. y + width]
-                for zz in [0 .. @depth - 1]
+                for zz in [0 .. @depth - height]
                     @data[xx][yy][zz] = 1 if zz % 2 == 0
                 @data[xx][yy][@depth - 1] = 0
 
@@ -347,7 +354,6 @@ class World
 
 class Application
 
-    renderer: new THREE.WebGLRenderer(clearColor: 0xff0000)
     stats:    new Stats()
     clock:    new THREE.Clock()
     camera:   new THREE.PerspectiveCamera 50, window.innerWidth / window.innerHeight, 1, 500000
@@ -357,15 +363,18 @@ class Application
     constructor: ->
 
         @container = document.getElementById "container"
-
         @controls = new THREE.FirstPersonControls @camera
+        @renderer = new THREE.WebGLRenderer clearColor: 0xff0000
+
         @renderer.setSize window.innerWidth, window.innerHeight
-        # @renderer.shadowMapEnabled = true
-        # @renderer.shadowMapSoft = true
-        # @renderer.shadowMapBias = 10
-        # @renderer.shadowCameraNear = 3;
-        # @renderer.shadowCameraFar = @camera.far;
-        # @renderer.shadowCameraFov = 90;
+
+        if SHADOWS    
+            @renderer.shadowMapEnabled = true
+            @renderer.shadowMapSoft = true
+            @renderer.shadowMapBias = 10
+            @renderer.shadowCameraNear = 3;
+            @renderer.shadowCameraFar = @camera.far;
+            @renderer.shadowCameraFov = 90;
 
         @renderer.autoClear = false
 
@@ -379,12 +388,14 @@ class Application
         @controls.lookSpeed = 0.125
         @controls.lookVertical = true
         @controls.constrainVertical = true
-        # @controls.verticalMin = 1.1
-        # @controls.verticalMax = 2.2
+
+        if PLAYER_LIMIT_VIEW
+            @controls.verticalMin = 1.1
+            @controls.verticalMax = 2.2
 
         window.addEventListener "resize", @onWindowResize, false
 
-        @world = new World @, 750, 750, 100, 150
+        @world = new World @, WORLD_SIZE, WORLD_SIZE, WORLD_HEIGHT, SECTOR_SIZE
 
         setTimeout @animate, 0
 
